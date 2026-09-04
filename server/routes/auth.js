@@ -1,25 +1,29 @@
 const express = require("express");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+
 const User = require("../models/User");
 const authMiddleware = require("../middleware/authMiddleware");
 
 const router = express.Router();
 
-// =========================
+
+// ========================================
 // REGISTER
-// =========================
+// ========================================
 
 router.post("/register", async (req, res) => {
     try {
         const { name, email, password } = req.body;
 
+        // Check required fields
         if (!name || !email || !password) {
             return res.status(400).json({
                 message: "Please provide name, email and password"
             });
         }
 
+        // Check if user already exists
         const existingUser = await User.findOne({ email });
 
         if (existingUser) {
@@ -28,8 +32,10 @@ router.post("/register", async (req, res) => {
             });
         }
 
+        // Hash password
         const hashedPassword = await bcrypt.hash(password, 10);
 
+        // Create user
         const user = await User.create({
             name,
             email,
@@ -46,6 +52,9 @@ router.post("/register", async (req, res) => {
         });
 
     } catch (error) {
+
+        console.error("REGISTER ERROR:", error);
+
         res.status(500).json({
             message: "Server error",
             error: error.message
@@ -54,15 +63,16 @@ router.post("/register", async (req, res) => {
 });
 
 
-// =========================
+// ========================================
 // LOGIN
-// =========================
+// ========================================
 
 router.post("/login", async (req, res) => {
     try {
+
         const { email, password } = req.body;
 
-        // Check fields
+        // Check required fields
         if (!email || !password) {
             return res.status(400).json({
                 message: "Please provide email and password"
@@ -90,10 +100,19 @@ router.post("/login", async (req, res) => {
             });
         }
 
+        // Check JWT secret
+        if (!process.env.JWT_SECRET) {
+            console.error("JWT_SECRET is missing from .env");
+
+            return res.status(500).json({
+                message: "JWT_SECRET is not configured"
+            });
+        }
+
         // Create JWT token
         const token = jwt.sign(
             {
-                userId: user._id
+                userId: user._id.toString()
             },
             process.env.JWT_SECRET,
             {
@@ -101,12 +120,22 @@ router.post("/login", async (req, res) => {
             }
         );
 
-        res.json({
+        console.log("Login successful for:", email);
+
+        res.status(200).json({
             message: "Login successful",
-            token
+            token,
+            user: {
+                id: user._id,
+                name: user.name,
+                email: user.email
+            }
         });
 
     } catch (error) {
+
+        console.error("LOGIN ERROR:", error);
+
         res.status(500).json({
             message: "Server error",
             error: error.message
@@ -114,12 +143,14 @@ router.post("/login", async (req, res) => {
     }
 });
 
-// =========================
+
+// ========================================
 // GET CURRENT USER
-// =========================
+// ========================================
 
 router.get("/me", authMiddleware, async (req, res) => {
     try {
+
         const user = await User.findById(req.user.userId)
             .select("-password");
 
@@ -129,18 +160,22 @@ router.get("/me", authMiddleware, async (req, res) => {
             });
         }
 
-        res.json({
+        res.status(200).json({
             id: user._id,
             name: user.name,
             email: user.email
         });
 
     } catch (error) {
+
+        console.error("GET USER ERROR:", error);
+
         res.status(500).json({
             message: "Server error",
             error: error.message
         });
     }
 });
+
 
 module.exports = router;
